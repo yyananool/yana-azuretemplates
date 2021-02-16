@@ -1,0 +1,71 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "The location where virtual machines to be deployed."
+      }
+    },
+    "virtualMachineSettings": {
+      "type": "object",
+      "metadata": {
+        "description": "Settings of the virtual machine deployed for the SQL Server purposes."
+      }
+    },
+    "msSqlSettings": {
+        "type": "object",
+        "metadata": {
+            "description": "The set of the MS SQL server configurations."
+        }
+    }
+  },
+  "variables": {
+  },
+  "resources": [
+      {
+      "type": "Microsoft.SqlVirtualMachine/sqlVirtualMachines",
+      "name": "[parameters('virtualMachineSettings').name]",
+      "apiVersion": "2017-03-01-preview",
+      "location": "[parameters('location')]",
+      "properties": {
+        "virtualMachineResourceId": "[resourceId('Microsoft.Compute/virtualMachines', parameters('virtualMachineSettings').name)]",
+        "sqlImageOffer": "[parameters('virtualMachineSettings').offer]",
+        "sqlServerLicenseType": "PAYG",
+        "sqlManagement": "Full",
+        "sqlImageSku": "[parameters('virtualMachineSettings').image]",
+        "KeyVaultCredentialSettings": {
+          "Enable": false
+        },
+        "StorageConfigurationSettings": {
+          "diskConfigurationType": "NEW",
+          "storageWorkloadType": "OLTP",
+          "SQLDataSettings": {
+            "LUNs": [0],
+            "DefaultFilePath": "F:\\data"
+          },
+          "SQLLogSettings": {
+            "LUNs": [1],
+            "DefaultFilePath": "G:\\log"
+          },
+          "SQLTempDbSettings": {
+            "DefaultFilePath": "D:\\tempDb"
+          }
+        },
+        "ServerConfigurationsManagementSettings": {
+          "SQLConnectivityUpdateSettings": {
+            "ConnectivityType": "[parameters('msSqlSettings').connectivityType]",
+            "Port": "[parameters('msSqlSettings').port]",
+            "SQLAuthUpdateUserName": "[parameters('msSqlSettings').userName]",
+            "SQLAuthUpdatePassword": "[parameters('msSqlSettings').userPassword]"
+          },
+          "AdditionalFeaturesServerConfigurations": {
+            "IsRServicesEnabled": false
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {}
+}

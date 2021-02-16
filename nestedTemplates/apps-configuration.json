@@ -1,0 +1,101 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "location": {
+        "type": "string",
+        "metadata": {
+          "description": "The location where virtual machines to be deployed."
+        }
+      },
+      "virtualMachineName": {
+        "type": "string",
+        "metadata": {
+          "description": "The name of the virtual machine where applications must be installed."
+        }
+      },
+      "sqlInstanceSettings": {
+        "type": "object",
+        "metadata": {
+            "description": "The set of the MS SQL server configuration parameters."
+        }
+      },
+      "managementToolSettings": {
+        "type": "object",
+        "metadata": {
+            "description": "The set of the Management Tool configuration parameters."
+          }
+      },
+      "installEkranServer": {
+        "type": "bool",
+        "metadata": {
+            "description": "Whether to install the Ekran Server Application on this virtual machine."
+        }
+      },
+      "installPGServer": {
+        "type": "bool",
+        "metadata": {
+            "description": "Whether to install the PostgreSQL Application on this virtual machine."
+        }
+      },
+      "subNetPrefix": {
+          "type": "string",
+          "metadata": {
+              "description": "The prefix of the subnetwork where Ekran System is deployed."
+          }
+      },
+      "dscModuleUrl": {
+        "type": "string",
+        "metadata": {
+          "description": "The URL where the archive with the DSC PowerShell script can be gotten."
+        }
+      }
+    },
+    "variables": {
+      "dscConfigurationFunction": "AppsConfiguration.ps1\\AppsConfiguration",
+      "sqlServerName": "[if(equals(parameters('sqlInstanceSettings').type, 'AzureSQL'),
+        if(contains(parameters('sqlInstanceSettings').instanceName, '.database.windows.net'), parameters('sqlInstanceSettings').instanceName,
+        concat(parameters('sqlInstanceSettings').instanceName, '.database.windows.net')), parameters('sqlInstanceSettings').instanceName)]"
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Compute/virtualMachines/extensions",
+        "name": "[concat(parameters('virtualMachineName'),'/Microsoft.Powershell.DSC')]",
+        "apiVersion": "2020-06-01",
+        "location": "[parameters('location')]",
+        "properties": {
+          "publisher": "Microsoft.Powershell",
+          "type": "DSC",
+          "typeHandlerVersion": "2.77",
+          "autoUpgradeMinorVersion": true,
+          "settings": {
+            "ModulesUrl": "[parameters('dscModuleUrl')]",
+            "configurationFunction": "[variables('dscConfigurationFunction')]",
+            "wmfVersion": "5.0",
+            "Properties": {
+              "installEkranServer": "[parameters('installEkranServer')]",
+              "installPGServer": "[parameters('installPGServer')]",
+              "managementToolUrl": "[parameters('managementToolSettings').url]",
+              "sqlServerHostname": "[variables('sqlServerName')]",
+              "sqlServerPort": "[parameters('sqlInstanceSettings').port]",
+              "sqlServerType": "[if(equals(parameters('sqlInstanceSettings').type, 'AzureSQL'), 'MSSQL', parameters('sqlInstanceSettings').type)]",
+              "subNetPrefix": "[parameters('subNetPrefix')]"
+            }
+          },
+          "protectedSettings": {
+            "Properties": {
+              "sqlServerUser": {
+                "userName": "[parameters('sqlInstanceSettings').userName]",
+                "password": "[parameters('sqlInstanceSettings').userPassword]"
+              },
+              "mtDefaultUser": {
+                "userName": "admin",
+                "password": "[parameters('managementToolSettings').userPassword]"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "outputs": {}
+  }

@@ -1,0 +1,152 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "The location where network resources to be deployed."
+      }
+    },
+    "networkSettings": {
+      "type": "object",
+      "metadata": {
+        "description": "Network settings for the Ekran System deployment."
+      }
+    },
+    "virtualMachinesSettings": {
+      "type": "array",
+      "metadata": {
+        "description": "Settings for the virtual machines to be deployed."
+      }
+    }
+  },
+  "variables": {
+    "networkSecurityGroupsNames": "[createArray(
+      concat(parameters('virtualMachinesSettings')[0].name, '-NetworkSecurityGroup'),
+      concat(parameters('virtualMachinesSettings')[1].name, '-NetworkSecurityGroup')
+    )]",
+    "networkInterfacesNames": "[createArray(
+      concat(parameters('virtualMachinesSettings')[0].name, '-NetworkInterface'),
+      concat(parameters('virtualMachinesSettings')[1].name, '-NetworkInterface')
+    )]"
+  },
+  "resources": [
+    {
+      "condition": "[equals(parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.newOrExistingOrNone, 'new')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2020-06-01",
+      "name": "[parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.name]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.sku]"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "[parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.publicIPAllocationMethod]",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.domainNameLabel]"
+        }
+      },
+      "copy": {
+        "name": "publicIpAddressCopy",
+        "count": 2,
+        "mode": "serial"
+      }
+    },
+    {
+      "condition": "[parameters('virtualMachinesSettings')[copyIndex()].deployVm]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('networkSecurityGroupsNames')[copyIndex()]]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "copy": [
+          {
+            "name": "securityRules",
+            "count": "[length(parameters('virtualMachinesSettings')[copyIndex()].firewallRules)]",
+            "input": {
+              "name": "[concat('Rule', copyIndex('securityRules', 1))]",
+              "properties": {
+                "priority": "[add(1000, copyIndex('securityRules', 1))]",
+                "access": "Allow",
+                "direction": "Inbound",
+                "destinationPortRange": "[parameters('virtualMachinesSettings')[copyIndex()].firewallRules[copyIndex('securityRules')]]",
+                "protocol": "Tcp",
+                "sourcePortRange": "*",
+                "sourceAddressPrefix": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          }
+        ]
+      },
+      "copy": {
+        "name": "networkSecurityGroupCopy",
+        "count": 2,
+        "mode": "Serial"
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2020-06-01",
+      "name": "[parameters('networkSettings').virtualNetworkName]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('networkSettings').virtualNetworkAddressPrefix]"
+          ]
+        }     
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2020-06-01",
+      "name": "[concat(parameters('networkSettings').virtualNetworkName, '/', parameters('networkSettings').virtualSubNetworkName)]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('networkSettings').virtualNetworkName)]"
+      ],
+      "properties": {
+        "addressPrefix": "[parameters('networkSettings').virtualSubNetworkAddressPrefix]"
+      }
+    },
+    {
+      "condition": "[parameters('virtualMachinesSettings')[copyIndex()].deployVm]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('networkInterfacesNames')[copyIndex()]]",
+      "dependsOn": [
+        "publicIpAddressCopy",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('networkSettings').virtualNetworkName, parameters('networkSettings').virtualSubNetworkName)]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupsNames')[copyIndex()])]"
+      ],
+      "location": "[parameters('location')]",
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": "[if(equals(parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.newOrExistingOrNone, 'none'), null(),
+                createObject('id', resourceId('Microsoft.Network/publicIPAddresses', parameters('virtualMachinesSettings')[copyIndex()].publicIpSettings.name)))]",
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('networkSettings').virtualNetworkName, parameters('networkSettings').virtualSubNetworkName)]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupsNames')[copyIndex()])]"
+        }
+      },
+      "copy": {
+        "name": "networkInterfaceControllerCopy",
+        "count": 2,
+        "mode": "serial"
+      }
+    }
+  ],
+  "outputs": {
+  }
+}

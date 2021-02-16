@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "The location where virtual machines to be deployed."
+      }
+    },
+    "virtualMachineSettings": {
+      "type": "object",
+      "metadata": {
+        "description": "Settings for the virtual machines to be deployed."
+      }
+    }
+  },
+  "variables": {
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2020-06-01",
+      "name": "[parameters('virtualMachineSettings').name]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('virtualMachineSettings').size]"
+         },
+        "osProfile": {
+          "computerName": "[parameters('virtualMachineSettings').name]",
+          "adminUsername": "[parameters('virtualMachineSettings').credentials.username]",
+          "adminPassword": "[parameters('virtualMachineSettings').credentials.password]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[parameters('virtualMachineSettings').publisher]",
+            "offer": "[parameters('virtualMachineSettings').offer]",
+            "sku": "[parameters('virtualMachineSettings').image]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "osType": "Windows",
+            "name": "[concat(parameters('virtualMachineSettings').name, '-OsDisk')]",
+            "createOption": "FromImage",
+            "caching": "ReadWrite",
+            "managedDisk": {
+              "storageAccountType": "[parameters('virtualMachineSettings').osDiskType]"
+            }
+           },
+          "copy": [
+            {
+              "name": "dataDisks",
+              "count": "[parameters('virtualMachineSettings').dataDiskCount]",
+              "input": {
+                "name": "[concat(parameters('virtualMachineSettings').name, '-DataDisk', copyIndex('dataDisks', 1))]",
+                "diskSizeGB": "[parameters('virtualMachineSettings').dataDisks.size[copyIndex('dataDisks')]]",
+                "lun": "[copyIndex('dataDisks')]",
+                "createOption": "empty",
+                "caching": "ReadOnly"
+              }
+            }
+          ]
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('virtualMachineSettings').name, '-NetworkInterface'))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": true
+          }
+        }
+       }
+    }
+  ],
+  "outputs": {
+
+  }
+}
